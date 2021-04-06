@@ -6,6 +6,7 @@
 #include "interrupt.h"
 #include <queue>
 #include <cstddef>
+#include <iostream>
 
 using namespace std;
 
@@ -19,6 +20,7 @@ using namespace std;
 //
 
 static queue<ucontext_t*> readyQueue;
+static ucontext_t* curThread;
 
 static void setup_thread(ucontext_t* uc_ptr) {
 	getcontext(uc_ptr);
@@ -28,13 +30,24 @@ static void setup_thread(ucontext_t* uc_ptr) {
 	uc_ptr->uc_stack.ss_flags = 0;
 	uc_ptr->uc_link = NULL;	
 }
-
+/*
+static void print_ready_queue() {
+	queue<ucontext_t*> copy = readyQueue;
+	cout << "Queue: ";
+	while (!copy.empty()) {
+		cout << copy.front() << ", ";
+		copy.pop();
+}
+	cout << endl;
+	}
+*/
 int thread_libinit(thread_startfunc_t func, void* arg) {
   //does not return at all on success
   
 	ucontext_t* ucontext_ptr = new ucontext_t;
 	setup_thread(ucontext_ptr);
 	makecontext(ucontext_ptr, (void(*)()) func, 1, arg);
+	curThread = ucontext_ptr;
 	if (setcontext(ucontext_ptr)){
 		return -1; //means failure
 	}
@@ -42,11 +55,35 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 }
 
 int thread_create(thread_startfunc_t func, void* arg) {
-  return -1;
+  	
+	ucontext_t* ucontext_ptr = new ucontext_t;
+	setup_thread(ucontext_ptr);
+	makecontext(ucontext_ptr, (void(*)()) func, 1, arg);
+	readyQueue.push(ucontext_ptr);
+	return 0;
 }
 
 int thread_yield() {
-  return -1;
+	
+	//print_ready_queue();
+	if (!readyQueue.empty()) {
+
+		ucontext_t* newContext = readyQueue.front();
+		readyQueue.pop();
+
+		readyQueue.push(curThread);
+		//cout << "Swapping: " << curThread << ", " << newContext << endl;
+		
+		ucontext_t* swap = curThread; 
+		curThread = newContext;
+
+		swapcontext(swap, newContext); 
+		
+		return 0;
+
+	}
+	return -1;
+	
 }
 
 int thread_lock(unsigned lock) {
