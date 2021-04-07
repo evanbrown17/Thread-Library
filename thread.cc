@@ -161,14 +161,10 @@ int thread_yield() {
 		Thread* swap = curThread; 
 		curThread = newThread;
 
-		swapcontext(swap->ucontext_ptr, newThread->ucontext_ptr); 
+		swapcontext(swap->ucontext_ptr, curThread->ucontext_ptr); 
 		
-		return 0;
-
 	}
-	//need to implement error checking and return -1 --just used now so an int is always
-	//returned - should still return 0 even if ready queue is empty
-	return -1;
+	return 0;
 	
 }
 
