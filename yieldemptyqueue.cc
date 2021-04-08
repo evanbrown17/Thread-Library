@@ -25,7 +25,10 @@ void parent(void* a) {
     int arg = (intptr_t) a;
     cout << "parent called with arg " << arg << endl;
 
-    if (thread_yield()) {
+    int yieldResult = thread_yield();
+    cout << "Yield returns " << yieldResult << endl;
+
+    if (yieldResult) {
 	    cout << "thread_yield failed.\n";
 	    exit(1);
     }

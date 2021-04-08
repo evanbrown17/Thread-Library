@@ -7,6 +7,7 @@
 #include <queue>
 #include <cstddef>
 #include <iostream>
+#include <list>
 
 using namespace std;
 
@@ -27,8 +28,17 @@ struct Thread {
 	bool done;
 };
 
+struct Lock {
+	queue<Thread*>* lockQueue;
+	Thread* lock_owner;
+	bool free;
+	unsigned int id;
+};
+
 static queue<Thread*> readyQueue;
+static list<Lock*> allLocks;
 static Thread* curThread;
+static Lock* curLock;
 static ucontext_t* main_thread;
 
 static int thread_id_counter = 0;
@@ -88,6 +98,8 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 	main_thread = new (nothrow) ucontext_t; //determines when no threads are left
 	getcontext(main_thread);
 
+	assert_interrupts_enabled();
+	interrupt_disable();
 	swapcontext(main_thread, curThread->ucontext_ptr);
 
 	while (!readyQueue.empty()) {
@@ -108,7 +120,11 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 }
 
 static void func_wrapper(thread_startfunc_t func, void* arg) {
+	assert_interrupts_disabled();
+	interrupt_enable();
 	func(arg); //call the function for the thread
+	assert_interrupts_enabled();
+	interrupt_disable();
 	curThread->done = true;
 	swapcontext(curThread->ucontext_ptr, main_thread);
 
@@ -120,13 +136,20 @@ int thread_create(thread_startfunc_t func, void* arg) {
 		return -1;
 	}
 
+	assert_interrupts_enabled();
+	interrupt_disable();
+
 	Thread* new_thread = new (nothrow) Thread;
 	if (new_thread == NULL) {
+		assert_interrupts_disabled();
+		interrupt_enable();
 		return -1;
 	}
 
 	new_thread->ucontext_ptr = new (nothrow) ucontext_t;
 	if (new_thread->ucontext_ptr == NULL) {
+		assert_interrupts_disabled();
+		interrupt_enable();
 		return -1;
 	}
 
@@ -139,6 +162,9 @@ int thread_create(thread_startfunc_t func, void* arg) {
 	new_thread->done = false;
 
 	readyQueue.push(new_thread);
+
+	assert_interrupts_disabled();
+	interrupt_enable();
 	return 0;
 	//need to implement error checking and return -1
 }
@@ -148,32 +174,141 @@ int thread_yield() {
 	if (!initialized) {
 		return -1;
 	}
+
+	assert_interrupts_enabled();
+	interrupt_disable();
 	
 	//print_ready_queue();
 	if (!readyQueue.empty()) {
 
-		Thread* newThread = readyQueue.front();
-		readyQueue.pop();
+		//Thread* newThread = readyQueue.front();
+		//readyQueue.pop();
 
 		readyQueue.push(curThread);
 		//cout << "Swapping: " << curThread << ", " << newContext << endl;
 		
-		Thread* swap = curThread; 
-		curThread = newThread;
-
-		swapcontext(swap->ucontext_ptr, curThread->ucontext_ptr); 
+		//Thread* swap = curThread; 
+		//curThread = newThread;
+		
+		
+		swapcontext(curThread->ucontext_ptr, main_thread); 
 		
 	}
+	assert_interrupts_disabled();
+	interrupt_enable();
 	return 0;
 	
 }
 
+static Lock* find_lock(unsigned lock_id) {
+	for (list<Lock*>::iterator it = allLocks.begin(); it != allLocks.end(); ++it) {
+		Lock* lock_ptr = *it;
+		if (lock_ptr->id == lock_id) {
+			return *it;
+		}
+	}
+
+	return NULL;
+}
+
 int thread_lock(unsigned lock) {
-  return -1;
+
+	if (!initialized) {
+		return -1;
+	}
+
+	interrupt_disable();
+
+	curLock = find_lock(lock);
+
+	if (curLock != NULL && !curLock->free &&(curLock->lock_owner->id == curThread->id)) { //error if a thread tries to acquire a lock it already has
+		assert_interrupts_disabled();
+		interrupt_enable();
+		return -1;
+	}
+
+	if (curLock == NULL){
+		Lock* new_lock = new (nothrow) Lock;
+		if (new_lock == NULL) {
+			assert_interrupts_disabled();
+			interrupt_enable();
+			return -1;
+		}
+		
+		new_lock->free = false;
+		new_lock->id = lock;
+		new_lock->lock_owner = curThread;
+		new_lock->lockQueue = new (nothrow) queue<Thread*>;
+		if (new_lock->lockQueue == NULL) {
+			assert_interrupts_disabled();
+			interrupt_enable();
+			return -1;
+		}
+
+
+		allLocks.push_back(new_lock);
+		curLock = new_lock;
+	} else {
+		if (curLock->free) {
+			curLock->free = false;
+			curLock->lock_owner = curThread;
+		}
+		else {
+			curLock->lockQueue->push(curThread);
+
+			/*
+			Thread* newThread = readyQueue.front();
+			readyQueue.pop();
+			Thread* swap = curThread; 
+			curThread = newThread;
+			*/
+
+			swapcontext(curThread->ucontext_ptr, main_thread);
+		}
+
+	}
+
+	assert_interrupts_disabled();
+	interrupt_enable();	
+	return 0;
+
 }
 
 int thread_unlock(unsigned lock) {
-  return -1;
+	if (!initialized) {
+		return -1;
+	}
+
+	interrupt_disable();
+
+	curLock = find_lock(lock);
+
+	if (curLock == NULL) { //error if lock does not exist
+		assert_interrupts_disabled();
+		interrupt_enable();
+		return -1;
+	}
+
+	if (curLock->free || curLock->lock_owner->id != curThread->id) { //error if thread tries to release a lock it does not own
+		assert_interrupts_disabled();
+		interrupt_enable();
+		return -1;
+	}
+
+	if (!curLock->lockQueue->empty()) {
+		Thread* next_lock_owner = curLock->lockQueue->front();
+		curLock->lock_owner = next_lock_owner;
+		curLock->lockQueue->pop();
+		readyQueue.push(next_lock_owner);
+	} else {
+		curLock->lock_owner = NULL;
+		curLock->free = true;
+	}
+
+	assert_interrupts_disabled();
+	interrupt_enable();
+	return 0;
+	
 }
 
 int thread_wait(unsigned lock, unsigned cond) {
