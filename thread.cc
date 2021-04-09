@@ -35,10 +35,17 @@ struct Lock {
 	unsigned int id;
 };
 
+struct ConditionVariable {
+	queue<Thread*>* cvQueue;
+	unsigned int id;
+};
+
 static queue<Thread*> readyQueue;
 static list<Lock*> allLocks;
+static list<ConditionVariable*> allCVs;
 static Thread* curThread;
 static Lock* curLock;
+static ConditionVariable* curCV;
 static ucontext_t* main_thread;
 
 static int thread_id_counter = 0;
@@ -221,7 +228,7 @@ int thread_lock(unsigned lock) {
 
 	curLock = find_lock(lock);
 
-	if (curLock != NULL && !curLock->free &&(curLock->lock_owner->id == curThread->id)) { //error if a thread tries to acquire a lock it already has
+	if (curLock != NULL && !curLock->free && (curLock->lock_owner->id == curThread->id)) { //error if a thread tries to acquire a lock it already has
 		assert_interrupts_disabled();
 		interrupt_enable();
 		return -1;
@@ -274,12 +281,7 @@ int thread_lock(unsigned lock) {
 
 }
 
-int thread_unlock(unsigned lock) {
-	if (!initialized) {
-		return -1;
-	}
-
-	interrupt_disable();
+int unlock_interrupts_disabled(unsigned lock) {
 
 	curLock = find_lock(lock);
 
@@ -305,21 +307,136 @@ int thread_unlock(unsigned lock) {
 		curLock->free = true;
 	}
 
+	return 0;
+
+}
+
+int thread_unlock(unsigned lock) {
+	if (!initialized) {
+		return -1;
+	}
+	
+	assert_interrupts_enabled();
+	interrupt_disable();
+
+	int unlock_result = unlock_interrupts_disabled(lock);
+
 	assert_interrupts_disabled();
 	interrupt_enable();
-	return 0;
+	return unlock_result;
 	
 }
 
+static ConditionVariable* find_cv(unsigned cvid) {
+	for (list<ConditionVariable*>::iterator it = allCVs.begin(); it != allCVs.end(); ++it) {
+		ConditionVariable* cv_ptr = *it;
+		if (cv_ptr->id == cvid) {
+			return *it;
+		}
+	}
+
+	return NULL;
+}
+
+
 int thread_wait(unsigned lock, unsigned cond) {
-  return -1;
+	
+	if (!initialized) {
+		return -1;
+	}
+
+	assert_interrupts_enabled();
+	interrupt_disable();
+
+	if (unlock_interrupts_disabled(lock)) {
+		assert_interrupts_disabled();
+		interrupt_enable();
+		return -1; //error if the calling thread does not own the lock
+	}
+
+	curCV = find_cv(cond);
+
+	if (curCV == NULL) {
+		ConditionVariable* newCV = new (nothrow) ConditionVariable;
+		if (newCV == NULL) {
+			assert_interrupts_disabled();
+			interrupt_enable();
+			return -1;
+		}
+
+		newCV->id = cond;
+		newCV->cvQueue = new (nothrow) queue<Thread*>;
+		if (newCV->cvQueue == NULL) {
+			assert_interrupts_disabled();
+			interrupt_enable();
+			return -1;
+		}
+		allCVs.push_back(newCV);
+		
+		curCV = newCV;
+	
+	}
+
+	curCV->cvQueue->push(curThread);
+	swapcontext(curThread->ucontext_ptr, main_thread);
+
+	assert_interrupts_disabled();
+	interrupt_enable();
+	return thread_lock(lock);
+
 }
 
 int thread_signal(unsigned lock, unsigned cond) {
-  return -1;
+	
+	if (!initialized) {
+		return -1;
+	}
+
+	assert_interrupts_enabled();
+	interrupt_disable();
+
+	curCV = find_cv(cond);
+
+	if (curCV != NULL) {
+		if (!curCV->cvQueue->empty()) {
+			Thread* thread_to_wakeup = curCV->cvQueue->front();
+			curCV->cvQueue->pop();
+			readyQueue.push(thread_to_wakeup);
+		}
+
+	}
+
+	//not an error if the CV doesn't exist or if the lock is not owned
+	assert_interrupts_disabled();
+	interrupt_enable();
+	return 0;
+
 }
 
 int thread_broadcast(unsigned lock, unsigned cond) {
-  return -1;
+	
+	if (!initialized) {
+		return -1;
+	}
+
+	assert_interrupts_enabled();
+	interrupt_disable();
+
+	curCV = find_cv(cond);
+
+	if (curCV != NULL) {
+		while (!curCV->cvQueue->empty()) {
+			Thread* thread_to_wakeup = curCV->cvQueue->front();
+			curCV->cvQueue->pop();
+			readyQueue.push(thread_to_wakeup);
+		}
+
+	}
+
+	//not an error if the CV doesn't exist or if the lock is not owned
+	assert_interrupts_disabled();
+	interrupt_enable();
+	return 0;
+
 }
 
