@@ -20,7 +20,10 @@ void add(int x) {
 	thread_lock(lock);
 
 	while(globalQueue.size() >= max_size) {
-		thread_wait(cv2, lock);
+		if (thread_wait(cv2, lock)) {
+			cout << "thread_wait failed\n";
+			exit(1);
+		}
 	}
 
 	globalQueue.push(x);
@@ -34,7 +37,9 @@ int remove() {
 	thread_lock(lock);
 
 	while(globalQueue.empty()) {
-		thread_wait(cv1, lock);
+		if (thread_wait(cv1, lock)) {
+			cout << "thread_wait failed\n";
+		}
 	}
 
 	int result = globalQueue.front();

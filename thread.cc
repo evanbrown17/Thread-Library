@@ -224,6 +224,7 @@ int thread_lock(unsigned lock) {
 		return -1;
 	}
 
+	assert_interrupts_enabled();
 	interrupt_disable();
 
 	curLock = find_lock(lock);
@@ -286,14 +287,10 @@ int unlock_interrupts_disabled(unsigned lock) {
 	curLock = find_lock(lock);
 
 	if (curLock == NULL) { //error if lock does not exist
-		assert_interrupts_disabled();
-		interrupt_enable();
 		return -1;
 	}
 
 	if (curLock->free || curLock->lock_owner->id != curThread->id) { //error if thread tries to release a lock it does not own
-		assert_interrupts_disabled();
-		interrupt_enable();
 		return -1;
 	}
 
