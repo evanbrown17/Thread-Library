@@ -62,14 +62,14 @@ static void setup_thread(Thread* thread) {
 }
 /*
 static void print_ready_queue() {
-	queue<ucontext_t*> copy = readyQueue;
+	queue<Thread*> copy = readyQueue;
 	cout << "Queue: ";
 	while (!copy.empty()) {
-		cout << copy.front() << ", ";
+		cout << copy.front()->id << ", ";
 		copy.pop();
-}
-	cout << endl;
 	}
+	cout << endl;
+}
 */
 
 static void delete_current_thread() {
