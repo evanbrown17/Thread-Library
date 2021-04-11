@@ -20,12 +20,15 @@ void add(int x) {
 	thread_lock(lock);
 
 	while(globalQueue.size() >= max_size) {
-		thread_wait(cv2, lock);
+		if (thread_wait(lock, cv2)) {
+			cout << "thread_wait failed\n";
+			exit(1);
+		}
 	}
 
 	globalQueue.push(x);
 	cout << "added " << x << endl;
-	thread_signal(cv1, lock);
+	thread_signal(lock, cv1);
 
 	thread_unlock(lock);
 }
@@ -34,26 +37,36 @@ int remove() {
 	thread_lock(lock);
 
 	while(globalQueue.empty()) {
-		thread_wait(cv1, lock);
+		if (thread_wait(lock, cv1)) {
+			cout << "thread_wait failed\n";
+		}
 	}
+
+	thread_yield();
 
 	int result = globalQueue.front();
 	globalQueue.pop();
 	cout << "removed " << result << endl;
-	thread_signal(cv2, lock);
+	
+	if (thread_signal(lock, cv2)) {
+		cout << "Thread signal failed.\n";
+	}
 
-	thread_unlock(lock);
+	if (thread_unlock(lock)) {
+		cout << "Thread unlock failed.\n";
+	}
 
 	return result;
 }
 
 void producer(void* a) {
     char* id = (char*) a;
-    cout << "produce called with id " << id << endl;
+    cout << "producer called with id " << id << endl;
 
     while (g < 10) {
 	    add(g);
 	    g++;
+	    thread_yield();
     }
 
     done = true;
@@ -63,12 +76,14 @@ void producer(void* a) {
 
 void consumer(void* a) {
 	char* id = (char*) a;
-	cout << "produce called with id " << id << endl;
+	cout << "consumer called with id " << id << endl;
 
-    	while (!done) {
+    	while (!done || !globalQueue.empty()) {
 	    int removed_item = remove();
 	    removed_item++;
     	}
+
+	thread_yield();
 
 	cout << "Done removing\n";
 }

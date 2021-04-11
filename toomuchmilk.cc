@@ -18,6 +18,7 @@ void milk(void* caller){
 	cout << thread << " acquired lock!\n";
 	if (noMilk) {
 		cout << thread << " buying milk!" << endl;
+		thread_yield();
 		noMilk = false;
 	}
 	if (thread_unlock(LOCK)) {
@@ -33,6 +34,8 @@ void milk(void* caller){
 void parent(void* a) {
     int arg = (intptr_t) a;
     cout << "parent called with arg " << arg << endl;
+
+    thread_yield();
 
     if (thread_create((thread_startfunc_t) milk, (void*) "thread A")) {
       cout << "thread_create failed\n";
