@@ -10,6 +10,7 @@
 #include <tuple>
 #include <deque>
 #include <utility>
+#include <vector>
 
 using namespace std;
 
@@ -31,7 +32,26 @@ int NUM_REQUESTS = 0;
 int EVERY_THREAD_HAS_REQUEST = 0; //boolean
 
 //int inputs[5][2];
-int inputs[5][2] = {{68, 390}, {1, 799}, {647, 800}, {391, 637}, {200, 887}};
+//int inputs[5][2] = {{68, 390}, {1, 799}, {647, 800}, {391, 637}, {200, 887}};
+//
+
+vector<int> input0requests;
+
+vector<int> input1requests;
+
+vector<int> input2requests;
+
+vector<int> input3requests;
+
+vector<int> input4requests;
+
+vector<int> inputs[5];
+
+//queue<pair<int, int>> inputs[10] = {make_pair(0, 68), make_pair(0, 390), make_pair(1, 1), make_pair(1, 799), make_pair(2, 647), make_pair(2, 800), make_pair(3, 391), make_pair(3, 637), make_pair(4, 200), make_pair(4, 887)};
+
+//int totalRequests = 10;
+
+//int input_counter = 0;
 
 /*
  * hasRequest()
@@ -131,20 +151,23 @@ void service(void* arg) {
  * Opens the files and starts putting requests on the queue.
  * Prints the appropriate request output.
  * */
-void request(pair<string, int>* fileNameNum) {
+void request(pair<vector<int>, int>* fileNameNum) {
 	//ifstream input;
   	//input.open(fileNameNum->first);	
-	int input[2];
-       	input[0] = inputs[fileNameNum->second][0];
+	//int input[2];
+       	//input[0] = inputs[fileNameNum->second][0];
 	
-       	input[1] = inputs[fileNameNum->second][1];
+       	//input[1] = inputs[fileNameNum->second][1];
 
 //  	if (input) { //if argument file exists
 		
 		//for (string requestNum; getline(input, requestNum);) {
-		for (int requestNum : input){	
+		//
+		int threadNum = fileNameNum->second;
+		for (unsigned int i = 0; i < fileNameNum->first.size(); i++){	
+
 			if (thread_lock(LOCK)) {
-				cout << "requester " << fileNameNum->second << " failed to acquire lock." << endl;
+				cout << "requester " << threadNum << " failed to acquire lock." << endl;
 			}
 			
 			//We should not make a request and wait if the queue is full or the thread has an outstanding request
@@ -156,7 +179,7 @@ void request(pair<string, int>* fileNameNum) {
 			
 			//Push a valid request (pair<file number, requested disk address>) to the queue
 			//DISK_QUEUE.push_back(make_pair(fileNameNum->second, stoi(requestNum, nullptr, 10)));
-			DISK_QUEUE.push_back(make_pair(fileNameNum->second, requestNum));
+			DISK_QUEUE.push_back(make_pair(fileNameNum->second, fileNameNum->first.at(i)));
 
 
 			NUM_REQUESTS++;
@@ -164,7 +187,7 @@ void request(pair<string, int>* fileNameNum) {
 				EVERY_THREAD_HAS_REQUEST = 1;
 			}
 		
-			cout << "requester " << fileNameNum->second << " track " << requestNum << endl;
+			cout << "requester " << fileNameNum->second << " track " << fileNameNum->first.at(i) << endl;
 			
 			//When there are no more requests that can be made, signal the servicer
 			if (DISK_QUEUE.size() == MAX_QUEUE_SIZE || EVERY_THREAD_HAS_REQUEST) {
@@ -176,6 +199,8 @@ void request(pair<string, int>* fileNameNum) {
 			if (thread_unlock(LOCK)) {
 				cout << "requester " << fileNameNum->second << " failed to release lock." << endl;
 			}
+
+			//input_counter++;
 		}	
  
 		//after reading through the file:
@@ -225,7 +250,7 @@ void request(pair<string, int>* fileNameNum) {
 void parent(pair<int, char**>* input) {
       
 	//MAX_QUEUE_SIZE = atoi(input->second[1]); //grabbing inputted queue size from argv
-	MAX_QUEUE_SIZE = 5;
+	MAX_QUEUE_SIZE = 3;
 
 	if (thread_lock(LOCK)) {
 		cout << "parent failed to acquire lock." << endl;
@@ -238,20 +263,20 @@ void parent(pair<int, char**>* input) {
 	}
 
 	//if (input->second[2] != NULL) { //as long as there is at least one file name given
-		int currentFile = 0;
+		//int currentFile = 0;
 		//loop through argv, creating a requester thread for each filename 
 		//for (int i = 2; i < input->first; i++) {
-		for (int i = 0; i < 5; i++) {	
+		for (int i = 0; i < ACTIVE_THREADS; i++) {	
 			//string name = input->second[i];
-			string name = to_string(i);
-			pair<string, int>* nameNumPair; 
-		        nameNumPair = new pair<string, int> (make_pair(name, currentFile));
+			//string name = to_string(i);
+			pair<vector<int>, int>* requestPair; 
+		        requestPair = new pair<vector<int>, int> (make_pair(inputs[i], i));
 			//pair holds the filename and the file index
 
-			currentFile++;
+			//currentFile++;
 			
 			//create new requester threads
-			if (thread_create((thread_startfunc_t) request, nameNumPair)) {
+			if (thread_create((thread_startfunc_t) request, requestPair)) {
 				cout << "thread create failed\n";
 				exit(1);
 			}
@@ -271,8 +296,29 @@ void parent(pair<int, char**>* input) {
 int main(int argc, char** argv) {
 	
 	//ACTIVE_THREADS = argc - 2; //first argument is the queue size, which does not correspond to an active thread 
-	ACTIVE_THREADS = 3;
+	ACTIVE_THREADS = 5;
 	pair<int, char**> inputPair = make_pair(argc, argv);
+
+	input0requests.push_back(68);
+	input0requests.push_back(390);
+	inputs[0] = input0requests;
+
+	input1requests.push_back(1);
+	input1requests.push_back(799);
+	inputs[1] = input1requests;
+
+	input2requests.push_back(647);
+	input2requests.push_back(800);
+	inputs[2] = input2requests;
+
+	input3requests.push_back(391);
+	input3requests.push_back(637);
+	inputs[3] = input3requests;
+
+	input4requests.push_back(200);
+	input4requests.push_back(887);
+	inputs[4] = input4requests;
+
 	
 	//initialize thread library starting in parent function, passing a pointer to the argc/argv pair
 	if (thread_libinit((thread_startfunc_t) parent, &inputPair)) {
