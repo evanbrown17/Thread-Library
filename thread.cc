@@ -26,6 +26,7 @@ struct Thread {
 	char* stack;
 	ucontext_t* ucontext_ptr;
 	bool done;
+	bool waiting;
 };
 
 struct Lock {
@@ -38,6 +39,7 @@ struct Lock {
 struct ConditionVariable {
 	queue<Thread*>* cvQueue;
 	unsigned int id;
+	unsigned int lockid;
 };
 
 static queue<Thread*> readyQueue;
@@ -81,6 +83,19 @@ static void delete_current_thread() {
 	delete curThread;
 }
 
+/*
+bool deadlocked() {
+	queue<Thread*> copy = readyQueue;
+	while (!copy.empty()) {
+		Thread* thread_ptr = copy.front();
+		if (!(thread_ptr->waiting)) {
+			return false;
+		}
+		copy.pop();
+	}
+	return true;
+}
+*/
 
 int thread_libinit(thread_startfunc_t func, void* arg) {
   //does not return at all on success
@@ -137,6 +152,8 @@ static void func_wrapper(thread_startfunc_t func, void* arg) {
 
 }
 
+
+
 int thread_create(thread_startfunc_t func, void* arg) {
 
 	if (!initialized) {
@@ -167,6 +184,7 @@ int thread_create(thread_startfunc_t func, void* arg) {
 	thread_id_counter++;
 
 	new_thread->done = false;
+	new_thread->waiting = false;
 
 	readyQueue.push(new_thread);
 
@@ -324,10 +342,10 @@ int thread_unlock(unsigned lock) {
 	
 }
 
-static ConditionVariable* find_cv(unsigned cvid) {
+static ConditionVariable* find_cv(unsigned lock, unsigned cvid) {
 	for (list<ConditionVariable*>::iterator it = allCVs.begin(); it != allCVs.end(); ++it) {
 		ConditionVariable* cv_ptr = *it;
-		if (cv_ptr->id == cvid) {
+		if (cv_ptr->id == cvid && cv_ptr->lockid == lock) {
 			return *it;
 		}
 	}
@@ -351,7 +369,7 @@ int thread_wait(unsigned lock, unsigned cond) {
 		return -1; //error if the calling thread does not own the lock
 	}
 
-	curCV = find_cv(cond);
+	curCV = find_cv(lock, cond);
 
 	if (curCV == NULL) {
 		ConditionVariable* newCV = new (nothrow) ConditionVariable;
@@ -362,6 +380,7 @@ int thread_wait(unsigned lock, unsigned cond) {
 		}
 
 		newCV->id = cond;
+		newCV->lockid = lock;
 		newCV->cvQueue = new (nothrow) queue<Thread*>;
 		if (newCV->cvQueue == NULL) {
 			assert_interrupts_disabled();
@@ -376,7 +395,7 @@ int thread_wait(unsigned lock, unsigned cond) {
 
 	curCV->cvQueue->push(curThread);
 	swapcontext(curThread->ucontext_ptr, main_thread);
-
+	curThread->waiting = true;
 	assert_interrupts_disabled();
 	interrupt_enable();
 	return thread_lock(lock);
@@ -392,13 +411,14 @@ int thread_signal(unsigned lock, unsigned cond) {
 	assert_interrupts_enabled();
 	interrupt_disable();
 
-	curCV = find_cv(cond);
+	curCV = find_cv(lock, cond);
 
 	if (curCV != NULL) {
 		if (!curCV->cvQueue->empty()) {
 			Thread* thread_to_wakeup = curCV->cvQueue->front();
 			curCV->cvQueue->pop();
 			readyQueue.push(thread_to_wakeup);
+			thread_to_wakeup->waiting = false;
 		}
 
 	}
@@ -419,13 +439,14 @@ int thread_broadcast(unsigned lock, unsigned cond) {
 	assert_interrupts_enabled();
 	interrupt_disable();
 
-	curCV = find_cv(cond);
+	curCV = find_cv(lock, cond);
 
 	if (curCV != NULL) {
 		while (!curCV->cvQueue->empty()) {
 			Thread* thread_to_wakeup = curCV->cvQueue->front();
 			curCV->cvQueue->pop();
 			readyQueue.push(thread_to_wakeup);
+			thread_to_wakeup->waiting = true;
 		}
 
 	}
