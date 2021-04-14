@@ -135,6 +135,10 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 		}
 
 	}
+
+	if (curThread != NULL) {
+		delete_current_thread();
+	}
 	
 	cout << "Thread library exiting.\n";
 	exit(0);

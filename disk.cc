@@ -123,9 +123,13 @@ void service(void* arg) {
 
 		pair<int, int> nextEntry = seek(CURRENT_TRACK); //contains <index in queue of requesting thread, requested track>
 
+		thread_yield();
+
 		cout << "service requester " << DISK_QUEUE.at(nextEntry.first).first << " track " << nextEntry.second << endl;
 
 		DISK_QUEUE.erase(DISK_QUEUE.begin() + nextEntry.first);
+
+		thread_yield();
 	
 		NUM_REQUESTS--;
 		if (NUM_REQUESTS < ACTIVE_THREADS) {
@@ -181,6 +185,7 @@ void request(pair<vector<int>, int>* fileNameNum) {
 			//DISK_QUEUE.push_back(make_pair(fileNameNum->second, stoi(requestNum, nullptr, 10)));
 			DISK_QUEUE.push_back(make_pair(fileNameNum->second, fileNameNum->first.at(i)));
 
+			thread_yield();
 
 			NUM_REQUESTS++;
 			if (NUM_REQUESTS >= ACTIVE_THREADS) {
@@ -195,6 +200,8 @@ void request(pair<vector<int>, int>* fileNameNum) {
 					cout << "requester " << fileNameNum->second << " failed signaling CV1." << endl;
 				}
 			}
+
+			thread_yield();
 
 			if (thread_unlock(LOCK)) {
 				cout << "requester " << fileNameNum->second << " failed to release lock." << endl;
@@ -227,6 +234,8 @@ void request(pair<vector<int>, int>* fileNameNum) {
 				cout << "requester " << fileNameNum->second << " failed signaling CV1." << endl;
 			}
 		}
+
+		thread_yield();
 
 		if (thread_unlock(LOCK)) {
 			cout << "requester " << fileNameNum->second << " failed to release lock." << endl;
