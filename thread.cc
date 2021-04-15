@@ -55,6 +55,8 @@ static int thread_id_counter = 0;
 
 static bool initialized = false;
 
+/*
+
 static void setup_thread(Thread* thread) {
 	getcontext(thread->ucontext_ptr);
 	thread->stack = new (nothrow) char[STACK_SIZE];
@@ -62,8 +64,15 @@ static void setup_thread(Thread* thread) {
 	thread->ucontext_ptr->uc_stack.ss_size = STACK_SIZE;
 	thread->ucontext_ptr->uc_stack.ss_flags = 0;
 	thread->ucontext_ptr->uc_link = NULL;
+	if (thread->stack == NULL) {
+		delete thread->ucontext_ptr;
+		delete thread->stack;
+		delete thread;
+		thread = NULL;
+	}
 		
 }
+*/
 
 static void delete_current_thread() {
 	delete[] (curThread->stack);
@@ -72,6 +81,7 @@ static void delete_current_thread() {
 	curThread->ucontext_ptr->uc_stack.ss_flags = 0;
 	delete curThread->ucontext_ptr;
 	delete curThread;
+	curThread = NULL;
 }
 
 
@@ -96,6 +106,11 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 	readyQueue.pop();
 
 	main_thread = new (nothrow) ucontext_t; //determines when no threads are left
+	if (main_thread == NULL) {
+		delete main_thread;
+		return -1;
+	}
+
 	getcontext(main_thread);
 
 	assert_interrupts_enabled();
@@ -105,8 +120,8 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 	while (!readyQueue.empty()) {
 	//	cout << "Done? " << curThread->done << endl;
 		if (curThread->done) {
-			delete_current_thread();
 			unfreed.remove(curThread);
+			delete_current_thread();
 		}
 		curThread = readyQueue.front();
 		readyQueue.pop();
@@ -117,8 +132,8 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 	}
 
 	if (curThread != NULL) {
-		delete_current_thread();
 		unfreed.remove(curThread);
+		delete_current_thread();
 	}
 
 	for (Lock* lock : allLocks) {
@@ -129,12 +144,14 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 		delete cv->cvQueue;
 		delete cv;
 	}
+
 	
 	while (!unfreed.empty()) {
 		curThread = unfreed.front();
-		delete_current_thread();
 		unfreed.pop_front();
+		delete_current_thread();
 	}
+
 
 	delete main_thread;
 
@@ -166,23 +183,58 @@ int thread_create(thread_startfunc_t func, void* arg) {
 	interrupt_disable();
 
 	Thread* new_thread = new (nothrow) Thread;
-	unfreed.push_back(new_thread);
 
 	if (new_thread == NULL) {
+		delete new_thread;
 		assert_interrupts_disabled();
 		interrupt_enable();
 		return -1;
 	}
+
 
 	new_thread->ucontext_ptr = new (nothrow) ucontext_t;
+
 	if (new_thread->ucontext_ptr == NULL) {
 		delete new_thread->ucontext_ptr;
+		delete new_thread;
 		assert_interrupts_disabled();
 		interrupt_enable();
 		return -1;
 	}
 
-	setup_thread(new_thread);
+
+	getcontext(new_thread->ucontext_ptr);
+
+	new_thread->stack = new (nothrow) char[STACK_SIZE];
+	if (new_thread->stack == NULL) {
+		delete[] new_thread->stack;
+		delete new_thread->ucontext_ptr;
+		delete new_thread;
+		assert_interrupts_disabled();
+		interrupt_enable();
+		return -1;
+	}
+
+	new_thread->ucontext_ptr->uc_stack.ss_sp = new_thread->stack;
+	new_thread->ucontext_ptr->uc_stack.ss_size = STACK_SIZE;
+	new_thread->ucontext_ptr->uc_stack.ss_flags = 0;
+	new_thread->ucontext_ptr->uc_link = NULL;
+
+	/*
+	if (new_thread->stack == NULL || new_thread == NULL || new_thread->ucontext_ptr == NULL) {
+		delete new_thread->ucontext_ptr;
+		delete[] new_thread->stack;
+		delete new_thread;
+		assert_interrupts_disabled();
+		interrupt_enable();
+		return -1;
+
+	}
+	*/
+	
+	unfreed.push_back(new_thread);
+
+	//setup_thread(new_thread);
 	makecontext(new_thread->ucontext_ptr, (void(*)()) func_wrapper, 2, func, arg);
 
 	new_thread->id = thread_id_counter;
@@ -196,7 +248,6 @@ int thread_create(thread_startfunc_t func, void* arg) {
 	assert_interrupts_disabled();
 	interrupt_enable();
 	return 0;
-	//need to implement error checking and return -1
 }
 
 int thread_yield() {
@@ -258,9 +309,10 @@ int thread_lock(unsigned lock) {
 		return -1;
 	}
 
-	if (curLock == NULL){
+	if (curLock == NULL){ //new lock
 		Lock* new_lock = new (nothrow) Lock;
 		if (new_lock == NULL) {
+			delete new_lock;
 			assert_interrupts_disabled();
 			interrupt_enable();
 			return -1;
@@ -271,6 +323,8 @@ int thread_lock(unsigned lock) {
 		new_lock->lock_owner = curThread;
 		new_lock->lockQueue = new (nothrow) queue<Thread*>;
 		if (new_lock->lockQueue == NULL) {
+			delete new_lock->lockQueue;
+			delete new_lock;
 			assert_interrupts_disabled();
 			interrupt_enable();
 			return -1;
@@ -279,7 +333,7 @@ int thread_lock(unsigned lock) {
 
 		allLocks.push_back(new_lock);
 		curLock = new_lock;
-	} else {
+	} else { //lock already exists
 		if (curLock->free) {
 			curLock->free = false;
 			curLock->lock_owner = curThread;
@@ -379,6 +433,7 @@ int thread_wait(unsigned lock, unsigned cond) {
 	if (curCV == NULL) {
 		ConditionVariable* newCV = new (nothrow) ConditionVariable;
 		if (newCV == NULL) {
+			delete newCV;
 			assert_interrupts_disabled();
 			interrupt_enable();
 			return -1;
@@ -388,6 +443,8 @@ int thread_wait(unsigned lock, unsigned cond) {
 		newCV->lockid = lock;
 		newCV->cvQueue = new (nothrow) queue<Thread*>;
 		if (newCV->cvQueue == NULL) {
+			delete newCV->cvQueue;
+			delete newCV;
 			assert_interrupts_disabled();
 			interrupt_enable();
 			return -1;

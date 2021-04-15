@@ -19,6 +19,8 @@ using namespace std;
 #define CV1 2
 #define CV2 3
 
+#define CV5 5
+
 unsigned int MAX_QUEUE_SIZE;
 
 unsigned int QUEUE_SIZE = 0;
@@ -135,14 +137,22 @@ void service(void* arg) {
 		if (NUM_REQUESTS < ACTIVE_THREADS) {
 			EVERY_THREAD_HAS_REQUEST = 0;
 		}
+
+		thread_unlock(LOCK);
 	
 		if (thread_broadcast(LOCK, CV2)) {
 			cout << "servicer failed signaling on CV2." << endl;
 		}
-	
-		if (thread_unlock(LOCK)) {
-			cout << "servicer failed unlocking." << endl;
+
+		thread_lock(LOCK);
+		if (thread_broadcast(LOCK, CV5)) {
+			cout << "servicer failed signlaing on CV5." << endl;
 		}
+
+		if (thread_unlock(LOCK)) {
+			cout << "Servicer failed to unlock." << endl;
+		}
+	
 	
 	}
 }
@@ -193,19 +203,31 @@ void request(pair<vector<int>, int>* fileNameNum) {
 			}
 		
 			cout << "requester " << fileNameNum->second << " track " << fileNameNum->first.at(i) << endl;
+
+			thread_unlock(LOCK);
 			
 			//When there are no more requests that can be made, signal the servicer
 			if (DISK_QUEUE.size() == MAX_QUEUE_SIZE || EVERY_THREAD_HAS_REQUEST) {
 				if (thread_signal(LOCK, CV1)) {
 					cout << "requester " << fileNameNum->second << " failed signaling CV1." << endl;
 				}
-			}
 
-			thread_yield();
+				if (thread_signal(LOCK, CV5)) {
+					cout << "requester " << fileNameNum->second << " failed signaling CV5." << endl;
+				}
+			}
 
 			if (thread_unlock(LOCK)) {
-				cout << "requester " << fileNameNum->second << " failed to release lock." << endl;
+				cout << "requester " << fileNameNum->second << " failed to unlock." << endl;
 			}
+
+			if (thread_yield()) {
+				cout << "requester " << fileNameNum->second << " failed to yield." << endl;
+			}
+
+			//if (thread_unlock(LOCK)) {
+				//cout << "requester " << fileNameNum->second << " failed to release lock." << endl;
+			//}
 
 			//input_counter++;
 		}	

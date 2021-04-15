@@ -36,7 +36,10 @@ int main() {
       int ten = 10;
       void *a = &ten;
       parent(a);
-      //cout << "thread_libinit failed\n";
-   
+      //if (thread_libinit((thread_startfunc_t) parent, (void*) 100)) {
+        //cout << "thread_libinit failed\n";
+      //}
 }
+ 
+   
 

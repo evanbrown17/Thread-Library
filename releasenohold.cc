@@ -39,7 +39,6 @@ void loop(void* a) {
 		}	
 		if (thread_yield()) {
 			cout << "thread_yield failed\n";
-			exit(1);
 		}
 	}
 }
@@ -51,7 +50,6 @@ void parent(void* a) {
 
 	if (thread_create((thread_startfunc_t) loop, (void*) "child thread")) {
 		cout << "thread_create failed\n";
-		exit(1);
 	}
 	loop((void*) "parent thread");
 }
@@ -59,6 +57,5 @@ void parent(void* a) {
 int main() {
 	if (thread_libinit((thread_startfunc_t) parent, (void*) 100)) {
 		cout << "thread_libinit failed\n";
-		exit(1);
 	}
 }
