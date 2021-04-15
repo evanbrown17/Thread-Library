@@ -176,6 +176,7 @@ int thread_create(thread_startfunc_t func, void* arg) {
 
 	new_thread->ucontext_ptr = new (nothrow) ucontext_t;
 	if (new_thread->ucontext_ptr == NULL) {
+		delete new_thread->ucontext_ptr;
 		assert_interrupts_disabled();
 		interrupt_enable();
 		return -1;
