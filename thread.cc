@@ -49,6 +49,7 @@ static Thread* curThread;
 static Lock* curLock;
 static ConditionVariable* curCV;
 static ucontext_t* main_thread;
+static list<Thread*> unfreed;
 
 static int thread_id_counter = 0;
 
@@ -60,22 +61,12 @@ static void setup_thread(Thread* thread) {
 	thread->ucontext_ptr->uc_stack.ss_sp = thread->stack;
 	thread->ucontext_ptr->uc_stack.ss_size = STACK_SIZE;
 	thread->ucontext_ptr->uc_stack.ss_flags = 0;
-	thread->ucontext_ptr->uc_link = NULL;	
+	thread->ucontext_ptr->uc_link = NULL;
+		
 }
-/*
-static void print_ready_queue() {
-	queue<Thread*> copy = readyQueue;
-	cout << "Queue: ";
-	while (!copy.empty()) {
-		cout << copy.front()->id << ", ";
-		copy.pop();
-	}
-	cout << endl;
-}
-*/
 
 static void delete_current_thread() {
-	delete curThread->stack;
+	delete[] (curThread->stack);
 	curThread->ucontext_ptr->uc_stack.ss_sp = NULL;
 	curThread->ucontext_ptr->uc_stack.ss_size = 0;
 	curThread->ucontext_ptr->uc_stack.ss_flags = 0;
@@ -83,19 +74,6 @@ static void delete_current_thread() {
 	delete curThread;
 }
 
-/*
-bool deadlocked() {
-	queue<Thread*> copy = readyQueue;
-	while (!copy.empty()) {
-		Thread* thread_ptr = copy.front();
-		if (!(thread_ptr->waiting)) {
-			return false;
-		}
-		copy.pop();
-	}
-	return true;
-}
-*/
 
 int thread_libinit(thread_startfunc_t func, void* arg) {
   //does not return at all on success
@@ -125,8 +103,10 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 	swapcontext(main_thread, curThread->ucontext_ptr);
 
 	while (!readyQueue.empty()) {
+	//	cout << "Done? " << curThread->done << endl;
 		if (curThread->done) {
 			delete_current_thread();
+			unfreed.remove(curThread);
 		}
 		curThread = readyQueue.front();
 		readyQueue.pop();
@@ -138,8 +118,26 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 
 	if (curThread != NULL) {
 		delete_current_thread();
+		unfreed.remove(curThread);
+	}
+
+	for (Lock* lock : allLocks) {
+		delete lock->lockQueue;
+		delete lock;
+	}
+	for (ConditionVariable* cv : allCVs) {
+		delete cv->cvQueue;
+		delete cv;
 	}
 	
+	while (!unfreed.empty()) {
+		curThread = unfreed.front();
+		delete_current_thread();
+		unfreed.pop_front();
+	}
+
+	delete main_thread;
+
 	cout << "Thread library exiting.\n";
 	exit(0);
 	return 0;
@@ -168,6 +166,8 @@ int thread_create(thread_startfunc_t func, void* arg) {
 	interrupt_disable();
 
 	Thread* new_thread = new (nothrow) Thread;
+	unfreed.push_back(new_thread);
+
 	if (new_thread == NULL) {
 		assert_interrupts_disabled();
 		interrupt_enable();
