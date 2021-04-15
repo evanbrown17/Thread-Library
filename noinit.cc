@@ -33,8 +33,8 @@ void parent(void* a) {
 }
 
 int main() {
-      int ten = 10;
-      void *a = &ten;
+      
+      void *a =  (void*) 10;
       parent(a);
       //if (thread_libinit((thread_startfunc_t) parent, (void*) 100)) {
         //cout << "thread_libinit failed\n";
