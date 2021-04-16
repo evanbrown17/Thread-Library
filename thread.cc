@@ -1,5 +1,12 @@
 // thread.cc - implementation of a user-level thread library
 // Braden Fisher and Evan Brown
+// Last modified 4/15/21
+// CSCI 3310
+// Professor Barker
+//
+// Implements the user-level thread library defined in the thread.h header. The thread library 
+// implements operations that support creating new user-level threads, yielding the CPU to another 
+// runnable thread, and lock and condition variable operations with Mesa semantics.
 
 #include "ucontext.h"
 #include "thread.h"
@@ -10,15 +17,6 @@
 #include <list>
 
 using namespace std;
-
-// Remember to declare all helper functions and global
-// variables as static to avoid conflicting with names
-// used by test programs.
-
-// You should not write a main function here. Your main
-// function should be part of the test program that
-// uses the thread library.
-//
 
 
 struct Thread {
@@ -45,36 +43,22 @@ struct ConditionVariable {
 static queue<Thread*> readyQueue;
 static list<Lock*> allLocks;
 static list<ConditionVariable*> allCVs;
+
 static Thread* curThread;
 static Lock* curLock;
 static ConditionVariable* curCV;
+
 static ucontext_t* main_thread;
-static list<Thread*> unfreed;
+
+static list<Thread*> unfreed; //keeps track of all threads that have been allocated but not yet freed
 
 static int thread_id_counter = 0;
 
 static bool initialized = false;
 
-/*
-
-static void setup_thread(Thread* thread) {
-	getcontext(thread->ucontext_ptr);
-	thread->stack = new (nothrow) char[STACK_SIZE];
-	thread->ucontext_ptr->uc_stack.ss_sp = thread->stack;
-	thread->ucontext_ptr->uc_stack.ss_size = STACK_SIZE;
-	thread->ucontext_ptr->uc_stack.ss_flags = 0;
-	thread->ucontext_ptr->uc_link = NULL;
-	if (thread->stack == NULL) {
-		delete thread->ucontext_ptr;
-		delete thread->stack;
-		delete thread;
-		thread = NULL;
-	}
-		
-}
-*/
 
 static void delete_current_thread() {
+	//deletes the stack and ucontext pointer allocated to the thread, then deletes the thread itself
 	delete[] (curThread->stack);
 	curThread->ucontext_ptr->uc_stack.ss_sp = NULL;
 	curThread->ucontext_ptr->uc_stack.ss_size = 0;
@@ -84,28 +68,24 @@ static void delete_current_thread() {
 	curThread = NULL;
 }
 
-
 int thread_libinit(thread_startfunc_t func, void* arg) {
-  //does not return at all on success
+	//inititlizes the thread library and should be called exactly once before calling any other
+	//thread library functions: returns 0 on failure and does not return at all on success
   
 	if (initialized == true) { //can't initialize library more than once
 		return -1;
 	}
   	initialized = true;
 
-	//ucontext_t* first_ucontext_ptr = new ucontext_t;
-	//setup_thread(first_ucontext_ptr);
-	//makecontext(first_ucontext_ptr, (void(*)()) func, 1, arg);
-	//
 	
 	if (thread_create(func, arg)) {
 		return -1;
-	} //puts the first thread on the ready queue
+	} //puts the first thread on the ready queue with the function and argument specified by the user
 
 	curThread = readyQueue.front();
 	readyQueue.pop();
 
-	main_thread = new (nothrow) ucontext_t; //determines when no threads are left
+	main_thread = new (nothrow) ucontext_t; //determines which thread to run next and when no threads are left
 	if (main_thread == NULL) {
 		delete main_thread;
 		return -1;
@@ -115,10 +95,9 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 
 	assert_interrupts_enabled();
 	interrupt_disable();
-	swapcontext(main_thread, curThread->ucontext_ptr);
+	swapcontext(main_thread, curThread->ucontext_ptr); //start running the first thread
 
-	while (!readyQueue.empty()) {
-	//	cout << "Done? " << curThread->done << endl;
+	while (!readyQueue.empty()) { //run threads until none are left
 		if (curThread->done) {
 			unfreed.remove(curThread);
 			delete_current_thread();
@@ -126,12 +105,12 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 		curThread = readyQueue.front();
 		readyQueue.pop();
 		if (swapcontext(main_thread, curThread->ucontext_ptr)){
-			return -1; //means failure
+			return -1; //means failure from swapcontext
 		}
 
 	}
 
-	if (curThread != NULL) {
+	if (curThread != NULL) {//delete current thread if it is still not null but not running
 		unfreed.remove(curThread);
 		delete_current_thread();
 	}
@@ -140,40 +119,46 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 		delete lock->lockQueue;
 		delete lock;
 	}
+
 	for (ConditionVariable* cv : allCVs) {
 		delete cv->cvQueue;
 		delete cv;
 	}
 
 	
-	while (!unfreed.empty()) {
+	while (!unfreed.empty()) { //delete any remaining threads
 		curThread = unfreed.front();
 		unfreed.pop_front();
 		delete_current_thread();
 	}
 
-
 	delete main_thread;
 
 	cout << "Thread library exiting.\n";
 	exit(0);
-	return 0;
+	return 0; //never reaches this but the function must return an int
 }
 
 static void func_wrapper(thread_startfunc_t func, void* arg) {
+	//a wrapper function that calls the function specified for a new thread to call. The wrapper function is used so that it is known when 
+	//the thread is done by when its function returns
+	
 	assert_interrupts_disabled();
 	interrupt_enable();
+
 	func(arg); //call the function for the thread
+
 	assert_interrupts_enabled();
 	interrupt_disable();
+
 	curThread->done = true;
-	swapcontext(curThread->ucontext_ptr, main_thread);
+	swapcontext(curThread->ucontext_ptr, main_thread); //go back to the main thread to delete this one and run the next one
 
 }
 
-
-
 int thread_create(thread_startfunc_t func, void* arg) {
+	//creates a new thread, which calls func with the argument arg. The new thread is not run immediately but is put on the 
+	//ready queue. Returns 0 on success and -1 on failure (such as if there is no memory left)
 
 	if (!initialized) {
 		return -1;
@@ -219,23 +204,10 @@ int thread_create(thread_startfunc_t func, void* arg) {
 	new_thread->ucontext_ptr->uc_stack.ss_size = STACK_SIZE;
 	new_thread->ucontext_ptr->uc_stack.ss_flags = 0;
 	new_thread->ucontext_ptr->uc_link = NULL;
-
-	/*
-	if (new_thread->stack == NULL || new_thread == NULL || new_thread->ucontext_ptr == NULL) {
-		delete new_thread->ucontext_ptr;
-		delete[] new_thread->stack;
-		delete new_thread;
-		assert_interrupts_disabled();
-		interrupt_enable();
-		return -1;
-
-	}
-	*/
 	
 	unfreed.push_back(new_thread);
 
-	//setup_thread(new_thread);
-	makecontext(new_thread->ucontext_ptr, (void(*)()) func_wrapper, 2, func, arg);
+	makecontext(new_thread->ucontext_ptr, (void(*)()) func_wrapper, 2, func, arg); //direct the new thread to the wrapper function
 
 	new_thread->id = thread_id_counter;
 	thread_id_counter++;
@@ -251,6 +223,8 @@ int thread_create(thread_startfunc_t func, void* arg) {
 }
 
 int thread_yield() {
+	//causes the currently-running thread to stop running and yield the CPU to the next runnable 
+	//thread on the ready queue. Returns 0 on success and -1 on failure
 
 	if (!initialized) {
 		return -1;
@@ -259,29 +233,21 @@ int thread_yield() {
 	assert_interrupts_enabled();
 	interrupt_disable();
 	
-	//print_ready_queue();
-	if (!readyQueue.empty()) {
-
-		//Thread* newThread = readyQueue.front();
-		//readyQueue.pop();
-
+	if (!readyQueue.empty()) { //nothing happens if there are no other threads to run
 		readyQueue.push(curThread);
-		//cout << "Swapping: " << curThread << ", " << newContext << endl;
-		
-		//Thread* swap = curThread; 
-		//curThread = newThread;
-		
-		
-		swapcontext(curThread->ucontext_ptr, main_thread); 
-		
+		swapcontext(curThread->ucontext_ptr, main_thread); //let the main thread start running the next thread
 	}
-	assert_interrupts_disabled();
+
+	assert_interrupts_disabled(); //thread enables interrupts when it runs again
 	interrupt_enable();
 	return 0;
 	
 }
 
 static Lock* find_lock(unsigned lock_id) {
+	//searches the list, by lock id number, of all the locks that have been used before and returns a pointer to the 
+	//lock if it is found and NULL if it is not found
+	
 	for (list<Lock*>::iterator it = allLocks.begin(); it != allLocks.end(); ++it) {
 		Lock* lock_ptr = *it;
 		if (lock_ptr->id == lock_id) {
@@ -293,6 +259,9 @@ static Lock* find_lock(unsigned lock_id) {
 }
 
 int thread_lock(unsigned lock) {
+	//called by threads that are attempting to acquire the lock. If the lock is free, the thread then owns the lock,
+	//but is put on the queue of threads waiting for the lock otherwise. Returns 0 on success and -1 on failure, 
+	//which occurs when a thread tries to acquire a lock it already has
 
 	if (!initialized) {
 		return -1;
@@ -321,6 +290,7 @@ int thread_lock(unsigned lock) {
 		new_lock->free = false;
 		new_lock->id = lock;
 		new_lock->lock_owner = curThread;
+
 		new_lock->lockQueue = new (nothrow) queue<Thread*>;
 		if (new_lock->lockQueue == NULL) {
 			delete new_lock->lockQueue;
@@ -330,36 +300,31 @@ int thread_lock(unsigned lock) {
 			return -1;
 		}
 
-
 		allLocks.push_back(new_lock);
 		curLock = new_lock;
+
 	} else { //lock already exists
 		if (curLock->free) {
 			curLock->free = false;
-			curLock->lock_owner = curThread;
+			curLock->lock_owner = curThread; //current thread owns the lock if it was free before
 		}
 		else {
-			curLock->lockQueue->push(curThread);
-
-			/*
-			Thread* newThread = readyQueue.front();
-			readyQueue.pop();
-			Thread* swap = curThread; 
-			curThread = newThread;
-			*/
-
+			curLock->lockQueue->push(curThread); //gets added to the queue waiting on the lock otherwise
 			swapcontext(curThread->ucontext_ptr, main_thread);
 		}
 
 	}
 
-	assert_interrupts_disabled();
+	assert_interrupts_disabled(); //interrupts are always enabled by awoken threads before they return to user code
 	interrupt_enable();	
 	return 0;
 
 }
 
-int unlock_interrupts_disabled(unsigned lock) {
+static int unlock_interrupts_disabled(unsigned lock) {
+	//attempts to cause a thread to release the lock, and it must be run with interrupts disabled. It was 
+	//included as a helper function because it is used by both thread_unlock and thread_wait. Returns 0 on 
+	//success and -1 on failure
 
 	curLock = find_lock(lock);
 
@@ -371,12 +336,12 @@ int unlock_interrupts_disabled(unsigned lock) {
 		return -1;
 	}
 
-	if (!curLock->lockQueue->empty()) {
+	if (!curLock->lockQueue->empty()) { //the owner becomes the thread at the front of the queue waiting for the lock
 		Thread* next_lock_owner = curLock->lockQueue->front();
 		curLock->lock_owner = next_lock_owner;
 		curLock->lockQueue->pop();
-		readyQueue.push(next_lock_owner);
-	} else {
+		readyQueue.push(next_lock_owner);//"wakes up" the thread that now has the lock
+	} else { //if no other thread wants the lock
 		curLock->lock_owner = NULL;
 		curLock->free = true;
 	}
@@ -386,6 +351,9 @@ int unlock_interrupts_disabled(unsigned lock) {
 }
 
 int thread_unlock(unsigned lock) {
+	//called when the current thread releases the lock. It cannot release a lock that does not exist
+	//or a lock it does not own. Returns 0 on success and -1 on failure
+
 	if (!initialized) {
 		return -1;
 	}
@@ -402,9 +370,11 @@ int thread_unlock(unsigned lock) {
 }
 
 static ConditionVariable* find_cv(unsigned lock, unsigned cvid) {
+	//searches, by condition variable id, the list of all CVs that have been used and returns 
+	//the CV if it is found and NULL if it is not
 	for (list<ConditionVariable*>::iterator it = allCVs.begin(); it != allCVs.end(); ++it) {
 		ConditionVariable* cv_ptr = *it;
-		if (cv_ptr->id == cvid && cv_ptr->lockid == lock) {
+		if (cv_ptr->id == cvid && cv_ptr->lockid == lock) { //condition variable is tuple of CV number, lock numer
 			return *it;
 		}
 	}
@@ -414,6 +384,8 @@ static ConditionVariable* find_cv(unsigned lock, unsigned cvid) {
 
 
 int thread_wait(unsigned lock, unsigned cond) {
+	//called when a thread is waiting on a condition variable. The thread should have the associated lock to wait
+	//on a condition variable, else a new condition variable is made. Returns 0 on success and -1 on failure
 	
 	if (!initialized) {
 		return -1;
@@ -422,7 +394,7 @@ int thread_wait(unsigned lock, unsigned cond) {
 	assert_interrupts_enabled();
 	interrupt_disable();
 
-	if (unlock_interrupts_disabled(lock)) {
+	if (unlock_interrupts_disabled(lock)) { //the thread releases the lock when it waits
 		assert_interrupts_disabled();
 		interrupt_enable();
 		return -1; //error if the calling thread does not own the lock
@@ -449,22 +421,26 @@ int thread_wait(unsigned lock, unsigned cond) {
 			interrupt_enable();
 			return -1;
 		}
+
 		allCVs.push_back(newCV);
 		
 		curCV = newCV;
 	
 	}
 
-	curCV->cvQueue->push(curThread);
-	swapcontext(curThread->ucontext_ptr, main_thread);
+	curCV->cvQueue->push(curThread); //thread is now waiting on this CV, so it goes in its queue
 	curThread->waiting = true;
+	swapcontext(curThread->ucontext_ptr, main_thread);
 	assert_interrupts_disabled();
 	interrupt_enable();
-	return thread_lock(lock);
+	return thread_lock(lock); //when the awaiting thread is woken up, the first thing it must do is acquire the lock again
 
 }
 
 int thread_signal(unsigned lock, unsigned cond) {
+	//called when a thread signals on a condition variable, meaning it should "wake up" the first
+	//thread in the condition variable's waiting queue and put it on the ready queue. 
+	//Returns 0 on failure and -1 on success
 	
 	if (!initialized) {
 		return -1;
@@ -476,7 +452,7 @@ int thread_signal(unsigned lock, unsigned cond) {
 	curCV = find_cv(lock, cond);
 
 	if (curCV != NULL) {
-		if (!curCV->cvQueue->empty()) {
+		if (!curCV->cvQueue->empty()) { //nothing happens if no threads are waiting on the condition variable
 			Thread* thread_to_wakeup = curCV->cvQueue->front();
 			curCV->cvQueue->pop();
 			readyQueue.push(thread_to_wakeup);
@@ -485,7 +461,7 @@ int thread_signal(unsigned lock, unsigned cond) {
 
 	}
 
-	//not an error if the CV doesn't exist or if the lock is not owned
+	//not an error if the CV doesn't exist or if the lock is not owned by Mesa semantics
 	assert_interrupts_disabled();
 	interrupt_enable();
 	return 0;
@@ -493,6 +469,9 @@ int thread_signal(unsigned lock, unsigned cond) {
 }
 
 int thread_broadcast(unsigned lock, unsigned cond) {
+	//called when a thread wants to "wake up" every thread that is waiting on a condition variable, 
+	//meaning it takes out all the threads in the condition variable's waiting queue and puts them 
+	//on the ready queue. Returns 0 on success and -1 on failure
 	
 	if (!initialized) {
 		return -1;
@@ -503,8 +482,8 @@ int thread_broadcast(unsigned lock, unsigned cond) {
 
 	curCV = find_cv(lock, cond);
 
-	if (curCV != NULL) {
-		while (!curCV->cvQueue->empty()) {
+	if (curCV != NULL) { 
+		while (!curCV->cvQueue->empty()) { //wake up every thread in the CV's waiting queue
 			Thread* thread_to_wakeup = curCV->cvQueue->front();
 			curCV->cvQueue->pop();
 			readyQueue.push(thread_to_wakeup);
@@ -513,7 +492,7 @@ int thread_broadcast(unsigned lock, unsigned cond) {
 
 	}
 
-	//not an error if the CV doesn't exist or if the lock is not owned
+	//not an error if the CV doesn't exist or if the lock is not owned by Mesa semantics
 	assert_interrupts_disabled();
 	interrupt_enable();
 	return 0;
