@@ -1,3 +1,5 @@
+//Yields when there is nothing to yield to
+
 #include <iostream>
 #include <cstdlib>
 #include <stdint.h>

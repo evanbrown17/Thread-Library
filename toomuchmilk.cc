@@ -1,3 +1,5 @@
+//tests proper lock functionality by implementing the "too much milk"  probelm
+
 #include <iostream>
 #include <cstdlib>
 #include <stdint.h>

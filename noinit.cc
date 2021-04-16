@@ -1,4 +1,4 @@
-// A sample test program for the thread library.
+// Program attempts to create threads without ever calling thread-libinit()
 
 #include <iostream>
 #include <cstdlib>

@@ -4,7 +4,7 @@
 #include "thread.h"
 #include <cstring>
 
-//call signal without having initialized CV
+//calls signal twice in a row without waiting on anything
 //
 using namespace std;
 

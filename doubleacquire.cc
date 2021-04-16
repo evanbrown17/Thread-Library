@@ -4,7 +4,7 @@
 #include "thread.h"
 #include <cstring>
 
-//will exploit programs that are not checking which lock a CV corresponds to
+//Attempts to acquire a lock it already owns
 //
 using namespace std;
 
@@ -19,13 +19,6 @@ void loop(void* a) {
 	for (int i = 0; i < 5; i++, g++) {
 		unsigned lock = (unsigned) i;
 		thread_lock(lock);
-		//if (!strcmp(id, "parent thread")) {
-		//	cout << "parent thread waiting on lock " << lock << endl;
-		//	thread_wait(lock, cv);
-		//} else {
-		//	cout << "child thread signaling on lock " << lock << endl;
-		//	thread_signal(lock, cv);
-	//	}
 		cout << id << ":\t" << i << "\t" << g << endl;
 		if (thread_lock(lock)) {
 			cout << "We failed to doubly-acquire this lock: " << lock << endl;
