@@ -126,7 +126,6 @@ void service(void* arg) {
 
 		DISK_QUEUE.erase(DISK_QUEUE.begin() + nextEntry.first);
 
-		thread_yield();
 	
 		NUM_REQUESTS--;
 		if (NUM_REQUESTS < ACTIVE_THREADS) {
@@ -140,7 +139,6 @@ void service(void* arg) {
 		}
 
 		thread_lock(LOCK);
-		cout << "signaling CV5\n";
 		if (thread_signal(LOCK, CV5)) {
 			cout << "servicer failed signlaing on CV5." << endl;
 		}
@@ -182,16 +180,17 @@ void request(pair<vector<int>, int>* fileNameNum) {
 			
 			//We should not make a request and wait if the queue is full or the thread has an outstanding request
 			while (DISK_QUEUE.size() == MAX_QUEUE_SIZE || hasRequest(fileNameNum->second)) {
+				cout << "requester " << fileNameNum->second << " about to wait on CV2.\n";
 				if (thread_wait(LOCK, CV2)) {
 					cout << "requester " << fileNameNum->second << " failed waiting on CV2." << endl;
 				}
+				cout << "requester " << fileNameNum->second << " was signaled.\n";
 			}
 			
 			//Push a valid request (pair<file number, requested disk address>) to the queue
 			//DISK_QUEUE.push_back(make_pair(fileNameNum->second, stoi(requestNum, nullptr, 10)));
 			DISK_QUEUE.push_back(make_pair(fileNameNum->second, fileNameNum->first.at(i)));
 
-			thread_yield();
 
 			NUM_REQUESTS++;
 			if (NUM_REQUESTS >= ACTIVE_THREADS) {
@@ -213,9 +212,6 @@ void request(pair<vector<int>, int>* fileNameNum) {
 				}
 			}
 
-			if (thread_unlock(LOCK)) {
-				cout << "requester " << fileNameNum->second << " failed to unlock." << endl;
-			}
 
 			if (thread_yield()) {
 				cout << "requester " << fileNameNum->second << " failed to yield." << endl;
@@ -236,6 +232,8 @@ void request(pair<vector<int>, int>* fileNameNum) {
 		
 		//thread should wait when it has outstanding request
 		while (hasRequest(fileNameNum->second)) {
+			cout << "requester " << fileNameNum->second << " about to wait on CV2.\n";
+
 			if (thread_wait(LOCK, CV2)) {
 				cout << "Requester " << fileNameNum->second << " failed waiting on CV2." << endl;
 			}
@@ -253,11 +251,11 @@ void request(pair<vector<int>, int>* fileNameNum) {
 			}
 		}
 
-		thread_yield();
-
 		if (thread_unlock(LOCK)) {
-			cout << "requester " << fileNameNum->second << " failed to release lock." << endl;
+			cout << "requester " << fileNameNum->second << " failed to unlock.\n";
 		}
+
+		cout << "requester " << fileNameNum->second << " exiting.\n";
 		
 		delete (fileNameNum); //delete since it was made with "new"
 	
@@ -277,7 +275,7 @@ void request(pair<vector<int>, int>* fileNameNum) {
 void parent(pair<int, char**>* input) {
       
 	//MAX_QUEUE_SIZE = atoi(input->second[1]); //grabbing inputted queue size from argv
-	MAX_QUEUE_SIZE = 3;
+	MAX_QUEUE_SIZE = 2;
 
 	if (thread_lock(LOCK)) {
 		cout << "parent failed to acquire lock." << endl;
