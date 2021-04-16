@@ -1,4 +1,4 @@
-// disk.cc - simulation of a concurrent disk scheduler
+// disk.cc - simulation of a concurrent disk scheduler (modified to not need input)
 //
 // Evan Brown and Braden Fisher
 // Last modified 3/16/2021
@@ -49,11 +49,6 @@ vector<int> input4requests;
 
 vector<int> inputs[5];
 
-//queue<pair<int, int>> inputs[10] = {make_pair(0, 68), make_pair(0, 390), make_pair(1, 1), make_pair(1, 799), make_pair(2, 647), make_pair(2, 800), make_pair(3, 391), make_pair(3, 637), make_pair(4, 200), make_pair(4, 887)};
-
-//int totalRequests = 10;
-
-//int input_counter = 0;
 
 /*
  * hasRequest()
@@ -292,11 +287,9 @@ void parent(pair<int, char**>* input) {
 		cout << "thread create failed\n";
 		exit(1);
 	}
+	
+	//modified to not need input
 
-	//if (input->second[2] != NULL) { //as long as there is at least one file name given
-		//int currentFile = 0;
-		//loop through argv, creating a requester thread for each filename 
-		//for (int i = 2; i < input->first; i++) {
 		for (int i = 0; i < ACTIVE_THREADS; i++) {	
 			//string name = input->second[i];
 			//string name = to_string(i);
