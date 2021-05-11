@@ -1,0 +1,104 @@
+Date: Fri, 16 Apr 2021 18:25:32 -0400
+Running thread library test cases...
+------------------------- 0 -------------------------
+perfect!
+------------------------- 1 -------------------------
+perfect!
+------------------------- 2 -------------------------
+perfect!
+------------------------- 3 -------------------------
+perfect!
+------------------------- 4 -------------------------
+perfect!
+------------------------- 5 -------------------------
+perfect!
+------------------------- 6 -------------------------
+perfect!
+------------------------- 7 -------------------------
+perfect!
+------------------------- 8 -------------------------
+perfect!
+------------------------- 9 -------------------------
+perfect!
+------------------------- 10 -------------------------
+perfect!
+------------------------- 11 -------------------------
+perfect!
+------------------------- 12 -------------------------
+perfect!
+------------------------- 13 -------------------------
+perfect!
+------------------------- 14 -------------------------
+perfect!
+------------------------- 15 -------------------------
+perfect!
+------------------------- 16 -------------------------
+perfect!
+------------------------- 17 -------------------------
+perfect!
+------------------------- 18 -------------------------
+perfect!
+------------------------- 19 -------------------------
+perfect!
+------------------------- 20 -------------------------
+perfect!
+------------------------- 21 -------------------------
+perfect!
+------------------------- 22 -------------------------
+perfect!
+------------------------- 23 -------------------------
+perfect!
+------------------------- 24 -------------------------
+perfect!
+------------------------- 25 -------------------------
+perfect!
+------------------------- 26 -------------------------
+perfect!
+
+** Thread library test summary: passed 27 out of 27 tests **
+
+
+Checking student test cases (using buggy thread libraries A-M)...
+------ student test case broadcastnowait.cc ------
+student test case broadcastnowait.cc exposed the following buggy libraries: A B H
+------ student test case cvtrouble.cc ------
+student test case cvtrouble.cc exposed the following buggy libraries: A B I
+------ student test case deadlock.cc ------
+student test case deadlock.cc exposed the following buggy libraries: A B E K
+------ student test case diffthreadrelease.cc ------
+student test case diffthreadrelease.cc exposed the following buggy libraries: A B E L
+------ student test case disk.cc ------
+student test case disk.cc exposed the following buggy libraries: A B C E F G H I J L
+------ student test case disksignal.cc ------
+student test case disksignal.cc exposed the following buggy libraries: A B D E F H I J
+------ student test case doubleacquire.cc ------
+student test case doubleacquire.cc exposed the following buggy libraries: A B
+------ student test case doublesignal.cc ------
+student test case doublesignal.cc exposed the following buggy libraries: A B H
+------ student test case extrayield.cc ------
+student test case extrayield.cc exposed the following buggy libraries: A B
+------ student test case noinit.cc ------
+student test case noinit.cc exposed the following buggy libraries: M
+------ student test case nolockbroadcast.cc ------
+student test case nolockbroadcast.cc exposed the following buggy libraries: A B H I L
+------ student test case nolocksignal.cc ------
+student test case nolocksignal.cc exposed the following buggy libraries: A B H I L
+------ student test case producerconsumer.cc ------
+student test case producerconsumer.cc exposed the following buggy libraries: A B H I J
+------ student test case releasenohold.cc ------
+student test case releasenohold.cc exposed the following buggy libraries: A B L
+------ student test case sample.cc ------
+student test case sample.cc exposed the following buggy libraries: A B
+------ student test case signalnohold.cc ------
+student test case signalnohold.cc exposed the following buggy libraries: A B I L
+------ student test case signalnowait.cc ------
+student test case signalnowait.cc exposed the following buggy libraries: A B H
+------ student test case thirdthread.cc ------
+student test case thirdthread.cc exposed the following buggy libraries: A B
+------ student test case toomuchmilk.cc ------
+student test case toomuchmilk.cc exposed the following buggy libraries: A B E F
+------ student test case yieldemptyqueue.cc ------
+student test case yieldemptyqueue.cc exposed the following buggy libraries: A B
+
+** Student test suite summary: exposed 13 of 13 buggy thread libraries **
+

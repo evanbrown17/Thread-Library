@@ -1,0 +1,37 @@
+Project 3 - Thread Library
+Braden and Evan
+
+Correctness (autograder tests): 27/27
+Test suite (buggy libraries exposed): 13/13
+
+(100% autograder score!)
+
+
+Design:
+
+-Locks and CVs are stored in lists, which is inefficient; results in O(n) lookups in the number of locks or CVs (linear search). Instead, use maps for both (keyed by the lock/CV number) so lookups are O(1) regardless of the number of locks or CVs.
+
+-Not clear why you need the "unfreed" list, given that you are already storing whether each thread is done. Thus is duplicated work (you have two separate bits of code being used to delete threads; should only need one of them).
+
+-Several fields of the Thread struct are unnecessary: waiting is unused, id is redundant (can just use the ucontext_ptr itself as an id), and the ucontext_t already has a pointer to its stack so don't need the extra copy in the Thread struct.
+
+-Similarly for a lock, can just check lock_owner as null/non-null and get rid of free.
+
+-thread_id_counter global is also unused and should be deleted.
+
+-No need to call delete on structs that fail to allocate (if they return NULL, then there's nothing to free; calling delete on NULL won't do anything). This would get rid of a lot of boilerplate error code in the program.
+
+
+Style:
+
+-Line 75: if (initialized == true) should just be if (initialized)
+
+
+Writeup:
+
+The writeup can generally be more compact and higher level. For the design section, you can speak in higher-level terms about the design of the program -- e.g., explain how you switch between threads (i.e., the use of the ready queue), how you maintain locks and CVs (currently just storing them in lists and searching through them for lock/CV nums), and the basic approach of when to disable interrupts. This section likely needn't reference specific variables, class names, or struct fields (since you're trying to convey the high-level design decisions rather than the small implementation details). In many cases, the design section needn't reference anything language-specific at all (though not a hard and fast rule; e.g., in this case, discussion of ucontext_t is probably appropriate given how central it is to the program).
+
+The implementation section is secondary in importance; you can provide a bit more detail and highlight any particular implementation challenges you handled, but you don't need to try to cover every bit of code or go through every function. In most cases, the implementation section can be relatively short (since all the small details are always available in the code itself).
+
+
+Score: 95/100
